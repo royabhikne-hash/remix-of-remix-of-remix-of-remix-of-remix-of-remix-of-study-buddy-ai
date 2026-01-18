@@ -147,16 +147,21 @@ async function createSessionToken(
 ): Promise<string> {
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + SESSION_EXPIRY_HOURS * 60 * 60 * 1000);
-  
-  await supabase.from('session_tokens').insert({
+
+  const { error } = await supabase.from('session_tokens').insert({
     token,
     user_id: userId,
     user_type: userType,
     expires_at: expiresAt.toISOString(),
     ip_address: clientIp,
-    user_agent: userAgent
+    user_agent: userAgent,
   });
-  
+
+  if (error) {
+    console.error("Create session token error:", error);
+    throw new Error("Failed to create session");
+  }
+
   return token;
 }
 
@@ -193,11 +198,16 @@ async function revokeUserSessions(
   userId: string,
   userType: 'admin' | 'school'
 ): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from('session_tokens')
     .update({ is_revoked: true })
     .eq('user_id', userId)
     .eq('user_type', userType);
+
+  if (error) {
+    console.error("Revoke sessions error:", error);
+    throw new Error("Failed to revoke sessions");
+  }
 }
 
 Deno.serve(async (req) => {
@@ -398,18 +408,32 @@ Deno.serve(async (req) => {
       const newHash = await hashPassword(newPassword);
       const table = validation.userType === 'admin' ? 'admins' : 'schools';
 
-      await supabase
+      const { error: updateError } = await supabase
         .from(table)
-        .update({ 
-          password_hash: newHash, 
+        .update({
+          password_hash: newHash,
           password_reset_required: false,
-          password_updated_at: new Date().toISOString()
+          password_updated_at: new Date().toISOString(),
         })
         .eq("id", validation.userId);
 
+      if (updateError) {
+        console.error("Reset password update error:", updateError);
+        return new Response(
+          JSON.stringify({ error: "Password update failed" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Revoke all old sessions and create a new one
       await revokeUserSessions(supabase, validation.userId, validation.userType as 'admin' | 'school');
-      const newToken = await createSessionToken(supabase, validation.userId, validation.userType as 'admin' | 'school', clientIp, userAgent);
+      const newToken = await createSessionToken(
+        supabase,
+        validation.userId,
+        validation.userType as 'admin' | 'school',
+        clientIp,
+        userAgent
+      );
 
       return new Response(
         JSON.stringify({ success: true, sessionToken: newToken }),
@@ -654,8 +678,9 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error("Auth error:", error);
+    const message = error instanceof Error ? error.message : "Internal server error";
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

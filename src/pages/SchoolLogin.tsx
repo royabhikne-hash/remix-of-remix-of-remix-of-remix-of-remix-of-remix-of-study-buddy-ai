@@ -67,7 +67,7 @@ const SchoolLogin = () => {
       console.error("Password reset error:", error);
       toast({
         title: t('msg.error'),
-        description: "An error occurred. Please try again.",
+        description: error instanceof Error ? error.message : "An error occurred. Please try again.",
         variant: "destructive",
       });
     }

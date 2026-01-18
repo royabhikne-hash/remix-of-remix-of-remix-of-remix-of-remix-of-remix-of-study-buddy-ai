@@ -44,10 +44,16 @@ const Signup = () => {
   // Load schools on mount
   useEffect(() => {
     const loadSchools = async () => {
-      const { data } = await supabase
-        .from("schools")
+      const { data, error } = await supabase
+        .from("schools_public")
         .select("id, name, school_id")
         .order("name");
+
+      if (error) {
+        console.error("Load schools error:", error);
+        return;
+      }
+
       if (data) {
         setSchools(data);
         if (data.length > 0) {
