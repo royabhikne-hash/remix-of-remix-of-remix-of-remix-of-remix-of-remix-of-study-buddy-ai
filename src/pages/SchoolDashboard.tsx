@@ -122,9 +122,9 @@ const SchoolDashboard = () => {
         return;
       }
 
-      // Check if school is banned or fee not paid
+      // Check if school is banned or fee not paid (use public-safe view)
       const { data: school } = await supabase
-        .from("schools")
+        .from("schools_public")
         .select("id, is_banned, fee_paid")
         .eq("school_id", storedSchoolId)
         .maybeSingle();
